@@ -7,26 +7,11 @@ import (
 	"os"
 )
 
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	if err == nil {
-		return true
-	}
-	if os.IsNotExist(err) {
-		return false
-	}
-	return false
-}
-
-func isFlag(arg string) bool {
-	return len(arg) > 0 && arg[0] == '-'
-}
-
 func getFlagsAndFiles(args []string) ([]string, []string) {
 	flags := []string{}
 	files := []string{}
 	for _, arg := range args {
-		if isFlag(arg) {
+		if len(arg) > 0 && arg[0] == '-' {
 			flags = append(flags, arg)
 		} else {
 			files = append(files, arg)
@@ -47,49 +32,45 @@ func numberType(flags []string) rune {
 	return 'g'
 }
 
-func printNormal(scanner bufio.Scanner) {
-	for scanner.Scan() {
-		text := scanner.Text()
-		fmt.Println(text)
-	}
-}
-
-func printNumbered(scanner bufio.Scanner) {
+func printLines(scanner *bufio.Scanner, numberNonBlank bool) {
 	n := 1
 	for scanner.Scan() {
 		text := scanner.Text()
-		fmt.Println(n, " ", text)
-		n++
-	}
-}
-
-func printNumberedNonBlank(scanner bufio.Scanner) {
-	n := 1
-	for scanner.Scan() {
-		text := scanner.Text()
-		if text != "" {
-			fmt.Println(n, " ", text)
-			n++
+		if numberNonBlank {
+			if text != "" {
+				fmt.Printf("%d %s\n", n, text)
+				n++
+			} else {
+				fmt.Println(text)
+			}
 		} else {
-			fmt.Println(text)
+			fmt.Printf("%d %s\n", n, text)
+			n++
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "reading input:", err)
+	}
+}
+
+func printNormal(scanner *bufio.Scanner) {
+	for scanner.Scan() {
+		fmt.Println(scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "reading input:", err)
 	}
 }
 
 func readFromReader(r io.Reader, flags []string) {
 	scanner := bufio.NewScanner(r)
-
-	nt := numberType(flags)
-	if nt == 'n' {
-		printNumbered(*scanner)
-	} else if nt == 'b' {
-		printNumberedNonBlank(*scanner)
-	} else {
-		printNormal(*scanner)
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintln(os.Stderr, "reading standard input:", err)
+	switch numberType(flags) {
+	case 'n':
+		printLines(scanner, false)
+	case 'b':
+		printLines(scanner, true)
+	default:
+		printNormal(scanner)
 	}
 }
 
@@ -100,13 +81,13 @@ func main() {
 		return
 	}
 
-	for i := 0; i < len(files); i++ {
-		file, err := os.Open(files[i])
+	for _, file := range files {
+		f, err := os.Open(file)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error opening file: %v\n", err)
-			return
+			continue
 		}
-		defer file.Close()
-		readFromReader(file, flags)
+		readFromReader(f, flags)
+		f.Close()
 	}
 }
